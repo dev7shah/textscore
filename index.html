@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chapter Readability Checker</title>
+  <meta name="description" content="A free, private readability checker for authors. Get scores, find hard sentences, and check vocabulary.">
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-content">
+        <h1>Chapter readability checker</h1>
+        <p class="subtitle">A secure, browser-based tool for authors. Your text never leaves this page.</p>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <div class="input-section glass-panel">
+        <div class="controls-top">
+          <label for="audience-select" class="sr-only">Target audience</label>
+          <select id="audience-select" class="dropdown">
+            <option value="fiction">Fiction (Grade 5 to 8)</option>
+            <option value="nonfiction" selected>General nonfiction (Grade 8 to 10)</option>
+            <option value="academic">Academic (Grade 12+)</option>
+          </select>
+        </div>
+        
+        <textarea id="text-input" placeholder="Paste your chapter here..." aria-label="Text to check"></textarea>
+        
+        <div class="button-group">
+          <button id="btn-check" class="btn primary">Check readability</button>
+          <button id="btn-sample" class="btn secondary">Use sample text</button>
+          <button id="btn-clear" class="btn secondary outline">Clear</button>
+        </div>
+      </div>
+
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p id="loading-text">Processing text...</p>
+      </div>
+
+      <div id="error-message" class="error-message hidden" role="alert"></div>
+
+      <div id="results" class="results-section hidden">
+        <div class="results-header">
+          <h2>Results</h2>
+          <button id="btn-copy" class="btn small outline">Copy summary</button>
+        </div>
+
+        <!-- Headline Grade -->
+        <div class="glass-panel highlight-panel">
+          <h3 class="panel-title">Overall readability</h3>
+          <div class="headline-grade">
+            <span id="headline-score" class="score-huge"></span>
+            <div class="grade-details">
+              <p id="headline-verdict" class="verdict-text"></p>
+              <p id="flesch-label" class="flesch-text"></p>
+              <p id="disagree-warning" class="warning-text hidden"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="results-grid">
+          <!-- Formula Table -->
+          <div class="glass-panel">
+            <h3 class="panel-title">Scores</h3>
+            <table class="scores-table">
+              <thead>
+                <tr>
+                  <th>Formula</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+              <tbody id="formula-table-body">
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Chapter Checks -->
+          <div class="glass-panel">
+            <h3 class="panel-title">Chapter checks</h3>
+            <ul id="chapter-checks-list" class="checks-list">
+            </ul>
+          </div>
+        </div>
+
+        <!-- Vocabulary -->
+        <div class="glass-panel">
+          <h3 class="panel-title">Vocabulary</h3>
+          <p id="rare-word-share" class="stat-text"></p>
+          <div id="rare-words-list" class="tags-container"></div>
+        </div>
+
+        <!-- Five Hardest Sentences -->
+        <div class="glass-panel">
+          <h3 class="panel-title">Hardest sentences</h3>
+          <p class="section-desc">The top five hardest sentences to read, based on length, vocabulary, and clauses.</p>
+          <div id="hardest-sentences-container" class="hardest-list"></div>
+        </div>
+
+        <!-- Annotated Chapter -->
+        <div class="glass-panel full-width">
+          <h3 class="panel-title">Annotated chapter</h3>
+          <div id="annotated-text" class="annotated-content"></div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="glass-panel info-panel">
+        <h3>How this works</h3>
+        <p>This tool runs entirely in your browser. It splits your text into sentences and words to estimate how hard it is to read.</p>
+        <p>The scores are estimates based on word length and sentence length, not judgments of quality.</p>
+        <ul class="formula-list">
+          <li><strong>Flesch Reading Ease:</strong> Scores out of 100. Higher is easier.</li>
+          <li><strong>Flesch-Kincaid Grade:</strong> Estimates the US school grade needed to understand the text.</li>
+          <li><strong>Gunning Fog:</strong> Measures complex words (3 or more syllables).</li>
+          <li><strong>SMOG:</strong> Also measures polysyllables, needs at least 30 sentences.</li>
+          <li><strong>Coleman-Liau:</strong> Uses letter counting instead of syllables.</li>
+          <li><strong>ARI:</strong> Uses character and word counts.</li>
+        </ul>
+      </div>
+    </footer>
+  </div>
+
+  <script src="wordlist.js"></script>
+  <script src="readability.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

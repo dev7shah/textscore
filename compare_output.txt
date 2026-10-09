@@ -1,0 +1,67 @@
+Downloading 5,000 word chapter...
+
+Running comparison...
+Text Type            | Metric               | textstat   | Readability.js | Diff      
+-----------------------------------------------------------------------------------
+
+Children's Story
+                     | Words                | 112.00     | 112.00         | 0.00   
+                     | Sentences            | 2.00       | 2.00           | 0.00   
+                     | Syllables            | 151.00     | 151.00         | 0.00   
+                     | Flesch Reading Ease  | 35.94      | 35.94          | 0.00   
+                     | Flesch-Kincaid       | 22.16      | 22.16          | 0.00   
+                     | Gunning Fog          | 23.83      | 24.19          | 0.36   
+                     | Coleman-Liau         | 7.70       | 8.03           | 0.33   
+                     | ARI                  | 26.80      | 26.12          | 0.67   
+
+News Article
+                     | Words                | 81.00      | 82.00          | 1.00   
+                     | Sentences            | 6.00       | 5.00           | 1.00   
+                     | Syllables            | 136.00     | 138.00         | 2.00   
+                     | Flesch Reading Ease  | 51.09      | 47.81          | 3.27   
+                     | Flesch-Kincaid       | 9.49       | 10.66          | 1.18   ***
+                     | Gunning Fog          | 12.81      | 13.39          | 0.58   
+                     | Coleman-Liau         | 13.16      | 13.44          | 0.29   
+                     | ARI                  | 11.54      | 11.93          | 0.38   
+
+Fiction w/ Dialogue
+                     | Words                | 175.00     | 175.00         | 0.00   
+                     | Sentences            | 15.00      | 11.00          | 4.00   
+                     | Syllables            | 245.00     | 236.00         | 9.00   
+                     | Flesch Reading Ease  | 76.55      | 76.60          | 0.04   
+                     | Flesch-Kincaid       | 5.48       | 6.53           | 1.05   ***
+                     | Gunning Fog          | 7.18       | 7.74           | 0.55   
+                     | Coleman-Liau         | 4.90       | 5.89           | 1.00   
+                     | ARI                  | 4.56       | 5.39           | 0.83   
+
+Legal Paragraph
+                     | Words                | 99.00      | 100.00         | 1.00   
+                     | Sentences            | 4.00       | 4.00           | 0.00   
+                     | Syllables            | 167.00     | 169.00         | 2.00   
+                     | Flesch Reading Ease  | 39.00      | 38.49          | 0.52   
+                     | Flesch-Kincaid       | 13.97      | 14.10          | 0.13   
+                     | Gunning Fog          | 15.15      | 14.40          | 0.75   
+                     | Coleman-Liau         | 11.71      | 11.83          | 0.12   
+                     | ARI                  | 15.30      | 14.15          | 1.15   ***
+
+Academic Abstract
+                     | Words                | 91.00      | 94.00          | 3.00   
+                     | Sentences            | 6.00       | 5.00           | 1.00   
+                     | Syllables            | 198.00     | 204.00         | 6.00   
+                     | Flesch Reading Ease  | 7.37       | 4.15           | 3.21   
+                     | Flesch-Kincaid       | 16.00      | 17.35          | 1.35   ***
+                     | Gunning Fog          | 18.81      | 19.01          | 0.20   
+                     | Coleman-Liau         | 18.90      | 18.47          | 0.43   
+                     | ARI                  | 16.69      | 16.98          | 0.29   
+
+5,000 Word Chapter
+                     | Words                | 4998.00    | 5002.00        | 4.00   
+                     | Sentences            | 328.00     | 281.00         | 47.00  
+                     | Syllables            | 7068.00    | 7012.00        | 56.00  
+                     | Flesch Reading Ease  | 71.73      | 70.17          | 1.56   
+                     | Flesch-Kincaid       | 7.04       | 7.89           | 0.85   
+                     | Gunning Fog          | 8.95       | 9.82           | 0.86   
+                     | Coleman-Liau         | 7.12       | 7.34           | 0.21   
+                     | ARI                  | 7.54       | 7.63           | 0.09   
+
+Maximum difference across all metrics: 56.00
