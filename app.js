@@ -1,91 +1,430 @@
 document.addEventListener('DOMContentLoaded', function () {
   'use strict';
 
+  // --- Elements ---
   var textInput = document.getElementById('text-input');
-  var btnCheck = document.getElementById('btn-check');
+  var mirrorLayer = document.getElementById('mirror-layer');
+  var wordCountEl = document.getElementById('word-count');
+  var updateStatus = document.getElementById('update-status');
   var btnSample = document.getElementById('btn-sample');
+  var btnSampleEmpty = document.getElementById('btn-sample-empty');
   var btnClear = document.getElementById('btn-clear');
   var btnCopy = document.getElementById('btn-copy');
   var audienceSelect = document.getElementById('audience-select');
-  var resultsSection = document.getElementById('results');
-  var loadingSection = document.getElementById('loading');
-  var errorMsg = document.getElementById('error-message');
+  var btnResetBaseline = document.getElementById('btn-reset-baseline');
+  var baselineDiffEl = document.getElementById('baseline-diff');
 
+  var emptyState = document.getElementById('empty-state');
+  var resultsContent = document.getElementById('results-content');
+
+  // Mobile Tabs
+  var tabText = document.getElementById('tab-text');
+  var tabResults = document.getElementById('tab-results');
+  var editorCard = document.getElementById('editor-card');
+  var resultsCard = document.getElementById('results-card');
+
+  // Result Inner Tabs
+  var resultTabs = document.querySelectorAll('.results-inner .segment-tab');
+  var resultPanels = document.querySelectorAll('.results-inner .tab-content');
+
+  // --- State ---
   var currentStats = null;
-  var currentAudience = 'nonfiction';
-
+  var baselineGrade = null;
+  var debounceTimer = null;
   var SAMPLE_TEXT = "It was a dark and stormy night; the rain fell in torrents, except at occasional intervals, when it was checked by a violent gust of wind which swept up the streets (for it is in London that our scene lies), rattling along the housetops, and fiercely agitating the scanty flame of the lamps that struggled against the darkness.\n\n\"What a terrible night!\" she exclaimed, looking out the window. \"I cannot believe we are stuck here.\"\n\nHe did not reply immediately. He was busy examining the old map they had found in the attic. It was covered in dust and mysterious symbols that seemed to shift when you looked away. The whole situation was becoming increasingly peculiar, and he felt a growing sense of unease. Nevertheless, they had to press on with their investigation.";
 
-  // Setup Event Listeners
-  btnCheck.addEventListener('click', handleCheck);
-  btnSample.addEventListener('click', function () {
-    textInput.value = SAMPLE_TEXT;
-    handleCheck();
-  });
+  // --- Event Listeners ---
+  textInput.addEventListener('input', handleInput);
+  textInput.addEventListener('scroll', syncScroll, { passive: true });
+  
+  btnSample.addEventListener('click', loadSample);
+  btnSampleEmpty.addEventListener('click', loadSample);
   btnClear.addEventListener('click', function () {
     textInput.value = '';
-    resultsSection.classList.add('hidden');
-    errorMsg.classList.add('hidden');
+    handleInput();
     textInput.focus();
   });
+  
   btnCopy.addEventListener('click', handleCopy);
-  audienceSelect.addEventListener('change', function (e) {
-    currentAudience = e.target.value;
-    if (currentStats) updateVerdict(currentStats);
+  audienceSelect.addEventListener('change', function () {
+    if (currentStats) renderVerdict(currentStats);
+  });
+  
+  btnResetBaseline.addEventListener('click', function () {
+    baselineGrade = null;
+    if (currentStats) renderVerdict(currentStats);
   });
 
-  function handleCheck() {
+  // Mobile Segmented Switcher
+  tabText.addEventListener('click', function() { switchMobileTab('text'); });
+  tabResults.addEventListener('click', function() { switchMobileTab('results'); });
+
+  // Results Tabs
+  for (var i = 0; i < resultTabs.length; i++) {
+    resultTabs[i].addEventListener('click', function (e) {
+      var targetId = e.target.getAttribute('data-target');
+      for (var j = 0; j < resultTabs.length; j++) {
+        resultTabs[j].setAttribute('aria-selected', 'false');
+      }
+      e.target.setAttribute('aria-selected', 'true');
+      
+      for (var k = 0; k < resultPanels.length; k++) {
+        if (resultPanels[k].id === targetId) {
+          resultPanels[k].setAttribute('aria-hidden', 'false');
+        } else {
+          resultPanels[k].setAttribute('aria-hidden', 'true');
+        }
+      }
+    });
+  }
+
+  // --- Core Functions ---
+  function loadSample() {
+    textInput.value = SAMPLE_TEXT;
+    handleInput();
+  }
+
+  function handleInput() {
     var text = textInput.value;
+    updateStatus.textContent = 'Updating...';
+    
+    // Quick word count approximation for footer
+    var approxWords = (text.match(/\S+/g) || []).length;
+    wordCountEl.textContent = approxWords === 1 ? '1 word' : approxWords + ' words';
+    
+    // Sync mirror layout just for basic wrapping (highlights removed while typing)
+    mirrorLayer.textContent = text;
+    
+    if (debounceTimer) clearTimeout(debounceTimer);
+    
+    var delay = text.length > 60000 ? 900 : 400;
+    debounceTimer = setTimeout(function () {
+      processText(text);
+    }, delay);
+  }
+
+  function syncScroll() {
+    mirrorLayer.scrollTop = textInput.scrollTop;
+    mirrorLayer.scrollLeft = textInput.scrollLeft;
+  }
+
+  function processText(text) {
     if (!text.trim()) {
-      showError('Please enter some text to check.');
+      showEmpty('Paste or type your chapter to see the readability results.');
       return;
     }
 
-    errorMsg.classList.add('hidden');
-    resultsSection.classList.add('hidden');
-    loadingSection.classList.remove('hidden');
-
-    // Use a small timeout to let the UI update before heavy processing
-    setTimeout(function () {
-      try {
-        currentStats = Readability.computeStats(text, window.CommonWords);
-        if (!currentStats) {
-          showError('Not enough text to analyze. Please add more words.');
-        } else {
-          renderResults(currentStats);
-          resultsSection.classList.remove('hidden');
-        }
-      } catch (err) {
-        showError('An error occurred while processing the text. ' + err.message);
-      } finally {
-        loadingSection.classList.add('hidden');
+    try {
+      currentStats = Readability.computeStats(text, window.CommonWords);
+      if (!currentStats) {
+        showEmpty('Keep typing. Needs at least 1 full sentence and a few words.');
+        return;
       }
-    }, 10);
+      
+      // Initialize baseline on first valid result
+      if (baselineGrade === null) {
+        baselineGrade = currentStats.medianGrade;
+      }
+      
+      renderResults(currentStats);
+      renderHighlights(currentStats);
+      updateStatus.textContent = 'Updated';
+      
+    } catch (err) {
+      console.error(err);
+      updateStatus.textContent = 'Error processing text';
+    }
   }
 
-  function showError(msg) {
-    errorMsg.textContent = msg;
-    errorMsg.classList.remove('hidden');
-    loadingSection.classList.add('hidden');
+  function showEmpty(msg) {
+    emptyState.querySelector('p').textContent = msg;
+    emptyState.classList.remove('hidden');
+    resultsContent.classList.add('hidden');
+    updateStatus.textContent = 'Updated';
+    currentStats = null;
+    mirrorLayer.textContent = textInput.value;
   }
 
-  function renderResults(stats) {
-    // 1. Headline Grade
-    document.getElementById('headline-score').textContent = 'Grade ' + stats.medianGrade.toFixed(1);
-    document.getElementById('flesch-label').textContent = stats.fleschLabel + ' (' + stats.fleschReadingEase.toFixed(1) + ')';
-    
-    var warningEl = document.getElementById('disagree-warning');
-    if (stats.formulasDisagree) {
-      warningEl.textContent = 'Formulas disagree. The text probably has unusual sentence lengths or many names. Range: Grade ' + stats.minGrade.toFixed(1) + ' to ' + stats.maxGrade.toFixed(1) + '.';
-      warningEl.classList.remove('hidden');
+  function switchMobileTab(tab) {
+    if (tab === 'text') {
+      tabText.setAttribute('aria-selected', 'true');
+      tabResults.setAttribute('aria-selected', 'false');
+      editorCard.classList.remove('mobile-hidden');
+      resultsCard.classList.add('mobile-hidden');
     } else {
-      warningEl.classList.add('hidden');
+      tabText.setAttribute('aria-selected', 'false');
+      tabResults.setAttribute('aria-selected', 'true');
+      editorCard.classList.add('mobile-hidden');
+      resultsCard.classList.remove('mobile-hidden');
+    }
+  }
+
+  // --- Rendering ---
+  function renderResults(stats) {
+    emptyState.classList.add('hidden');
+    resultsContent.classList.remove('hidden');
+
+    renderVerdict(stats);
+    renderRangeBar(stats);
+    renderSentences(stats);
+    renderOverview(stats);
+    renderVocabulary(stats);
+    renderRhythm(stats);
+    renderFormulasTable(stats);
+  }
+
+  function renderVerdict(stats) {
+    var audience = audienceSelect.value;
+    var minT = 8, maxT = 10, label = 'general nonfiction';
+    if (audience === 'fiction') { minT = 5; maxT = 8; label = 'fiction'; }
+    if (audience === 'academic') { minT = 12; maxT = 99; label = 'academic'; }
+
+    var grade = stats.medianGrade;
+    document.getElementById('headline-score').textContent = 'Grade ' + grade.toFixed(1);
+    
+    var statusPill = document.getElementById('status-pill');
+    var verdictSent = document.getElementById('verdict-sentence');
+    var targetStr = minT + ' to ' + (maxT===99 ? '12+' : maxT);
+
+    if (grade < minT - 0.5) {
+      statusPill.className = 'status-pill status-below';
+      statusPill.textContent = 'Below target';
+    } else if (grade > maxT + 0.5) {
+      statusPill.className = 'status-pill status-above';
+      statusPill.textContent = 'Above target';
+    } else {
+      statusPill.className = 'status-pill status-ok';
+      statusPill.textContent = 'On target';
     }
 
-    updateVerdict(stats);
+    verdictSent.textContent = 'Reads at grade ' + grade.toFixed(1) + ', ' + statusPill.textContent.toLowerCase() + ' for ' + label + '. Target is grades ' + targetStr + '.';
 
-    // 2. Formula Table
-    var tbody = document.getElementById('formula-table-body');
+    if (baselineGrade !== null && Math.abs(baselineGrade - grade) > 0.1) {
+      var diff = grade - baselineGrade;
+      baselineDiffEl.textContent = (diff > 0 ? 'Up ' : 'Down ') + Math.abs(diff).toFixed(1) + ' grades since your first check.';
+      baselineDiffEl.className = 'baseline-diff ' + (diff > 0 ? 'diff-up' : 'diff-down');
+      btnResetBaseline.classList.remove('hidden');
+    } else {
+      baselineDiffEl.classList.add('hidden');
+      btnResetBaseline.classList.add('hidden');
+    }
+  }
+
+  function renderRangeBar(stats) {
+    var minScore = stats.minGrade;
+    var maxScore = stats.maxGrade;
+    var median = stats.medianGrade;
+    
+    var audience = audienceSelect.value;
+    var tMin = 8, tMax = 10;
+    if (audience === 'fiction') { tMin = 5; tMax = 8; }
+    if (audience === 'academic') { tMin = 12; tMax = 18; }
+
+    var scaleMax = 18;
+    
+    function toPct(val) {
+      return Math.min(100, Math.max(0, (val / scaleMax) * 100)) + '%';
+    }
+
+    var targetEl = document.getElementById('range-target');
+    targetEl.style.left = toPct(tMin);
+    targetEl.style.width = toPct(tMax - tMin);
+
+    var spreadEl = document.getElementById('range-spread');
+    spreadEl.style.left = toPct(minScore);
+    spreadEl.style.width = (Math.max(0, maxScore - minScore) / scaleMax * 100) + '%';
+
+    var medianEl = document.getElementById('range-median');
+    medianEl.style.left = toPct(median);
+
+    document.getElementById('range-caption').textContent = 'Scores range from ' + minScore.toFixed(1) + ' to ' + maxScore.toFixed(1) + '. Median is ' + median.toFixed(1) + '.';
+    
+    var warnEl = document.getElementById('disagree-warning');
+    if (maxScore - minScore > 4) {
+      warnEl.classList.remove('hidden');
+    } else {
+      warnEl.classList.add('hidden');
+    }
+  }
+
+  function renderSentences(stats) {
+    var list = document.getElementById('sentences-list');
+    list.innerHTML = '';
+    
+    if (stats.hardestSentences.length === 0) {
+      list.textContent = 'No long or complex sentences found.';
+      return;
+    }
+
+    for (var i = 0; i < stats.hardestSentences.length; i++) {
+      var s = stats.hardestSentences[i];
+      var tile = document.createElement('div');
+      tile.className = 'sentence-tile';
+
+      var header = document.createElement('div');
+      header.className = 'sentence-header';
+      var rank = document.createElement('span');
+      rank.className = 'sentence-rank';
+      rank.textContent = '#' + s.rank;
+      
+      var scoreBadge = document.createElement('span');
+      scoreBadge.style.fontWeight = '500';
+      scoreBadge.style.fontSize = '14px';
+      scoreBadge.textContent = s.difficulty.toFixed(0) + '/100';
+      
+      header.appendChild(rank);
+      header.appendChild(scoreBadge);
+      tile.appendChild(header);
+
+      var stext = document.createElement('div');
+      stext.className = 'sentence-text';
+      var txt = s.text;
+      if (txt.length > 200) txt = txt.substring(0, 197) + '...';
+      stext.textContent = txt;
+      tile.appendChild(stext);
+
+      var tags = document.createElement('div');
+      tags.className = 'sentence-tags';
+      for (var r = 0; r < s.reasons.length; r++) {
+        var t = document.createElement('span');
+        t.className = 'tag-pill';
+        t.textContent = s.reasons[r];
+        tags.appendChild(t);
+      }
+      if (s.rareWords.length > 0) {
+        var tr = document.createElement('span');
+        tr.className = 'tag-pill';
+        tr.textContent = s.rareWords.length + ' rare words';
+        tags.appendChild(tr);
+      }
+      tile.appendChild(tags);
+
+      var footer = document.createElement('div');
+      footer.className = 'sentence-footer';
+      footer.textContent = s.wordCount + ' words, ' + (s.syllableCount / s.wordCount).toFixed(1) + ' syllables/word.';
+      
+      var btn = document.createElement('button');
+      btn.className = 'btn btn-small btn-secondary';
+      btn.textContent = 'Show in text';
+      (function(rankNum) {
+        btn.addEventListener('click', function() {
+          switchMobileTab('text');
+          var markEl = document.getElementById('mark-' + rankNum);
+          if (markEl) {
+            markEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            markEl.style.backgroundColor = 'var(--hi-bg)';
+            setTimeout(function() { markEl.style.backgroundColor = ''; }, 1200);
+          }
+        });
+      })(s.rank);
+      footer.appendChild(btn);
+      tile.appendChild(footer);
+
+      list.appendChild(tile);
+    }
+  }
+
+  function renderOverview(stats) {
+    document.getElementById('stat-words').textContent = stats.wordCount;
+    document.getElementById('stat-sentences').textContent = stats.sentenceCount;
+    document.getElementById('stat-wps').textContent = (stats.wordCount / stats.sentenceCount).toFixed(1);
+    var mins = Math.max(1, Math.round(stats.wordCount / 250));
+    document.getElementById('stat-time').textContent = '~' + mins + ' min';
+    document.getElementById('stat-fre').textContent = stats.fleschReadingEase.toFixed(1) + ' (' + stats.fleschLabel + ')';
+
+    // Dialogue
+    document.getElementById('check-dialogue').textContent = 'Dialogue share: ' + (stats.dialogueShare.share * 100).toFixed(1) + '%';
+    document.getElementById('check-dialogue-advice').textContent = stats.dialogueShare.wordCount + ' words inside quotation marks. Fiction usually thrives with more dialogue.';
+
+    // Passive
+    document.getElementById('check-passive').textContent = 'Passive voice: ' + stats.passiveVoicePer1000.toFixed(1) + ' per 1k words';
+    document.getElementById('check-passive-advice').textContent = 'Found ' + stats.passiveVoiceCount + ' potential instances (estimate). Active voice is usually punchier.';
+
+    // Adverbs
+    document.getElementById('check-adverbs').textContent = 'Adverbs: ' + stats.adverbsPer1000.toFixed(1) + ' per 1k words';
+    document.getElementById('check-adverbs-advice').textContent = 'Found ' + stats.adverbCount + ' ly-words. Strong verbs often work better than adverbs.';
+
+    // Paragraphs
+    document.getElementById('check-paragraph').textContent = 'Longest paragraph: ' + stats.longestParagraph.wordCount + ' words';
+    document.getElementById('check-paragraph-advice').textContent = stats.longestParagraph.wordCount > 250 ? 'Paragraphs over 250 words can look like a wall of text.' : 'Well within the 250 word limit.';
+
+    // Openers
+    var openers = stats.openerFlags || [];
+    var opEl = document.getElementById('check-openers-container');
+    if (openers.length > 0) {
+      opEl.classList.remove('hidden');
+      document.getElementById('check-openers').textContent = 'Repeated openers: ' + openers.length;
+      var opWords = openers.map(function(o) { return '"' + o.word + '"'; });
+      document.getElementById('check-openers-advice').textContent = 'Sentences started with the same word 3+ times: ' + opWords.join(', ') + '.';
+    } else {
+      opEl.classList.add('hidden');
+    }
+  }
+
+  function renderVocabulary(stats) {
+    document.getElementById('vocab-share').textContent = (stats.rareWordShare * 100).toFixed(1) + '% of words are not in the top 5,000 most common English words.';
+    var list = document.getElementById('rare-word-list');
+    list.innerHTML = '';
+    
+    // Show top 10
+    var limit = Math.min(10, stats.rareWords.length);
+    for (var i = 0; i < limit; i++) {
+      var w = stats.rareWords[i];
+      var t = document.createElement('span');
+      t.className = 'rare-tag';
+      t.textContent = w.word + ' (' + w.count + ')';
+      list.appendChild(t);
+    }
+    if (stats.rareWords.length === 0) {
+      list.textContent = 'No rare words found.';
+    }
+  }
+
+  function renderRhythm(stats) {
+    var chart = document.getElementById('rhythm-chart');
+    chart.innerHTML = '';
+    var lengths = stats.sentenceLengths;
+    if (lengths.length === 0) return;
+
+    var maxLen = Math.max.apply(null, lengths);
+    if (maxLen === 0) maxLen = 1;
+
+    // Grouping into max 90 bars
+    var numBars = Math.min(lengths.length, 90);
+    var groupSize = Math.ceil(lengths.length / numBars);
+    var bars = [];
+    var isHardFlags = [];
+    
+    var hardestIdxs = stats.hardestSentences.map(function(s) { return s.originalIndex; });
+
+    for (var i = 0; i < lengths.length; i += groupSize) {
+      var chunk = lengths.slice(i, i + groupSize);
+      var maxInChunk = Math.max.apply(null, chunk);
+      bars.push(maxInChunk);
+      
+      var hasHard = false;
+      for (var j = 0; j < chunk.length; j++) {
+        if (hardestIdxs.indexOf(i + j) !== -1) hasHard = true;
+      }
+      isHardFlags.push(hasHard);
+    }
+
+    for (var b = 0; b < bars.length; b++) {
+      var bar = document.createElement('div');
+      bar.className = 'rhythm-bar' + (isHardFlags[b] ? ' hardest' : '');
+      var h = (bars[b] / maxLen) * 100;
+      bar.style.height = h + '%';
+      chart.appendChild(bar);
+    }
+
+    document.getElementById('rhythm-stats').textContent = 'Longest: ' + stats.longestSentenceWords + ' words. Shortest: ' + stats.shortestSentenceWords + ' words. Std dev: ' + stats.sentenceLengthStdDev.toFixed(1) + '.';
+    var interp = 'A standard deviation below 5 usually means the sentence lengths are too monotonous.';
+    if (stats.sentenceLengthStdDev > 5) interp = 'Good variation in sentence length keeps readers engaged.';
+    document.getElementById('rhythm-interpretation').textContent = interp;
+  }
+
+  function renderFormulasTable(stats) {
+    var tbody = document.getElementById('formulas-tbody');
     tbody.innerHTML = '';
     var formulas = [
       { name: 'Flesch-Kincaid', val: stats.fleschKincaid },
@@ -107,272 +446,10 @@ document.addEventListener('DOMContentLoaded', function () {
       tr.appendChild(td2);
       tbody.appendChild(tr);
     }
-    if (stats.smog === null) {
-      var tr = document.createElement('tr');
-      var td1 = document.createElement('td');
-      td1.textContent = 'SMOG';
-      var td2 = document.createElement('td');
-      td2.textContent = 'Needs 30+ sentences';
-      td2.style.color = 'var(--text-muted)';
-      td2.style.fontSize = '0.9em';
-      tr.appendChild(td1);
-      tr.appendChild(td2);
-      tbody.appendChild(tr);
-    }
-
-    // 3. Chapter Checks
-    var checksList = document.getElementById('chapter-checks-list');
-    checksList.innerHTML = '';
-
-    // Rhythm (Bar chart)
-    var rhythmLi = document.createElement('li');
-    rhythmLi.className = 'check-item';
-    var svgChart = createRhythmChart(stats.sentenceLengths);
-    var rhythmText = document.createElement('div');
-    rhythmText.className = 'check-result';
-    rhythmText.textContent = 'Rhythm variation: ' + stats.sentenceLengthStdDev.toFixed(1) + ' words';
-    var rhythmDesc = document.createElement('div');
-    rhythmDesc.className = 'check-desc';
-    rhythmDesc.textContent = 'Longest: ' + stats.longestSentenceWords + ' words. Shortest: ' + stats.shortestSentenceWords + ' words. A low spread means monotone rhythm.';
-    rhythmLi.appendChild(rhythmText);
-    rhythmLi.appendChild(rhythmDesc);
-    rhythmLi.appendChild(svgChart);
-    checksList.appendChild(rhythmLi);
-
-    // Passive voice
-    var passiveLi = document.createElement('li');
-    passiveLi.className = 'check-item';
-    var pDiv = document.createElement('div');
-    pDiv.className = 'check-result';
-    pDiv.textContent = 'Passive voice: ' + stats.passiveVoicePer1000.toFixed(1) + ' per 1000 words';
-    var pDesc = document.createElement('div');
-    pDesc.className = 'check-desc';
-    pDesc.textContent = 'Found ' + stats.passiveVoiceCount + ' potential instances. This is an estimate.';
-    passiveLi.appendChild(pDiv);
-    passiveLi.appendChild(pDesc);
-    checksList.appendChild(passiveLi);
-
-    // Adverbs
-    var advLi = document.createElement('li');
-    advLi.className = 'check-item';
-    var aDiv = document.createElement('div');
-    aDiv.className = 'check-result';
-    aDiv.textContent = 'Adverbs: ' + stats.adverbsPer1000.toFixed(1) + ' per 1000 words';
-    var aDesc = document.createElement('div');
-    aDesc.className = 'check-desc';
-    aDesc.textContent = 'Found ' + stats.adverbCount + ' ly words.';
-    advLi.appendChild(aDiv);
-    advLi.appendChild(aDesc);
-    checksList.appendChild(advLi);
-
-    // Dialogue share
-    var dialLi = document.createElement('li');
-    dialLi.className = 'check-item';
-    var dDiv = document.createElement('div');
-    dDiv.className = 'check-result';
-    dDiv.textContent = 'Dialogue share: ' + (stats.dialogueShare.share * 100).toFixed(1) + '%';
-    var dDesc = document.createElement('div');
-    dDesc.className = 'check-desc';
-    dDesc.textContent = stats.dialogueShare.wordCount + ' words inside quotation marks.';
-    dialLi.appendChild(dDiv);
-    dialLi.appendChild(dDesc);
-    checksList.appendChild(dialLi);
-
-    // Longest paragraph
-    var paraLi = document.createElement('li');
-    paraLi.className = 'check-item';
-    var paDiv = document.createElement('div');
-    paDiv.className = 'check-result';
-    paDiv.textContent = 'Longest paragraph: ' + stats.longestParagraph.wordCount + ' words';
-    var paDesc = document.createElement('div');
-    paDesc.className = 'check-desc';
-    if (stats.longestParagraph.wordCount > 250) {
-      paDesc.textContent = 'Flagged: Paragraphs over 250 words can look like a wall of text.';
-      paDiv.style.color = 'var(--warning)';
-    } else {
-      paDesc.textContent = 'Well within the 250 word limit.';
-    }
-    paraLi.appendChild(paDiv);
-    paraLi.appendChild(paDesc);
-    checksList.appendChild(paraLi);
-
-    // Sentence openers
-    if (stats.openerFlags && stats.openerFlags.length > 0) {
-      var opLi = document.createElement('li');
-      opLi.className = 'check-item';
-      var oDiv = document.createElement('div');
-      oDiv.className = 'check-result';
-      oDiv.textContent = 'Repeated sentence openers: ' + stats.openerFlags.length;
-      oDiv.style.color = 'var(--warning)';
-      var oDesc = document.createElement('div');
-      oDesc.className = 'check-desc';
-      var opWords = [];
-      for (var k = 0; k < stats.openerFlags.length; k++) {
-        opWords.push('"' + stats.openerFlags[k].word + '"');
-      }
-      oDesc.textContent = 'Sentences started with the same word 3 or more times: ' + opWords.join(', ') + '.';
-      opLi.appendChild(oDiv);
-      opLi.appendChild(oDesc);
-      checksList.appendChild(opLi);
-    }
-
-    // 4. Vocabulary
-    document.getElementById('rare-word-share').textContent = (stats.rareWordShare * 100).toFixed(1) + '% of words are not in the top 5,000 most common English words.';
-    var rareContainer = document.getElementById('rare-words-list');
-    rareContainer.innerHTML = '';
-    if (stats.rareWords.length > 0) {
-      for (var r = 0; r < stats.rareWords.length; r++) {
-        var t = document.createElement('span');
-        t.className = 'tag';
-        t.textContent = stats.rareWords[r].word + ' (' + stats.rareWords[r].count + ')';
-        rareContainer.appendChild(t);
-      }
-    } else {
-      rareContainer.textContent = 'No rare words found.';
-    }
-
-    // 5. Hardest Sentences
-    var hardContainer = document.getElementById('hardest-sentences-container');
-    hardContainer.innerHTML = '';
-    
-    if (stats.hardestSentences.length === 0) {
-      hardContainer.textContent = 'No long sentences found.';
-    } else {
-      for (var h = 0; h < stats.hardestSentences.length; h++) {
-        var sent = stats.hardestSentences[h];
-        var card = document.createElement('div');
-        card.className = 'hard-sentence-card';
-        
-        var badge = document.createElement('div');
-        badge.className = 'rank-badge';
-        badge.textContent = sent.rank;
-        card.appendChild(badge);
-
-        var st = document.createElement('div');
-        st.className = 'hard-text';
-        st.textContent = sent.text;
-        card.appendChild(st);
-
-        var meta = document.createElement('div');
-        meta.className = 'hard-meta';
-        
-        var sc = document.createElement('span');
-        sc.className = 'score-badge';
-        sc.textContent = 'Score: ' + sent.difficulty.toFixed(0) + '/100';
-        meta.appendChild(sc);
-
-        var wc = document.createElement('span');
-        wc.textContent = sent.wordCount + ' words';
-        meta.appendChild(wc);
-
-        for (var t = 0; t < sent.reasons.length; t++) {
-          var rtag = document.createElement('span');
-          rtag.className = 'tag tag-reason';
-          rtag.textContent = sent.reasons[t];
-          meta.appendChild(rtag);
-        }
-
-        if (sent.rareWords.length > 0) {
-          var rw = document.createElement('span');
-          // take up to 3 for summary
-          var topR = sent.rareWords.slice(0, 3).join(', ');
-          if (sent.rareWords.length > 3) topR += '...';
-          rw.textContent = 'Rare: ' + topR;
-          meta.appendChild(rw);
-        }
-
-        var btn = document.createElement('button');
-        btn.className = 'btn secondary outline btn-show';
-        btn.textContent = 'Show in text';
-        // Use closure to capture rank
-        (function(rankNum) {
-          btn.addEventListener('click', function() {
-            var el = document.getElementById('mark-' + rankNum);
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              el.classList.remove('mark-flash');
-              // trigger reflow
-              void el.offsetWidth;
-              el.classList.add('mark-flash');
-            }
-          });
-        })(sent.rank);
-        meta.appendChild(btn);
-
-        card.appendChild(meta);
-        hardContainer.appendChild(card);
-      }
-    }
-
-    // 6. Annotated Chapter
-    renderAnnotatedText(stats);
   }
 
-  function updateVerdict(stats) {
-    var vEl = document.getElementById('headline-verdict');
-    var grade = stats.medianGrade;
-    var targetMin, targetMax;
-    
-    if (currentAudience === 'fiction') {
-      targetMin = 5; targetMax = 8;
-    } else if (currentAudience === 'nonfiction') {
-      targetMin = 8; targetMax = 10;
-    } else {
-      targetMin = 12; targetMax = 99;
-    }
-
-    if (grade < targetMin) {
-      vEl.textContent = 'Below target grade';
-      vEl.style.color = 'var(--success)';
-    } else if (grade > targetMax) {
-      vEl.textContent = 'Above target grade';
-      vEl.style.color = 'var(--error)';
-    } else {
-      vEl.textContent = 'On target';
-      vEl.style.color = 'var(--success)';
-    }
-  }
-
-  function createRhythmChart(lengths) {
-    var svgNS = "http://www.w3.org/2000/svg";
-    var svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("class", "rhythm-chart");
-    svg.setAttribute("width", "100%");
-    svg.setAttribute("height", "100%");
-    svg.setAttribute("preserveAspectRatio", "none");
-    
-    if (lengths.length === 0) return svg;
-
-    var maxLen = Math.max.apply(null, lengths);
-    if (maxLen === 0) maxLen = 1;
-
-    for (var i = 0; i < lengths.length; i++) {
-      var rect = document.createElementNS(svgNS, "rect");
-      var widthPct = 100 / lengths.length;
-      var heightPct = (lengths[i] / maxLen) * 100;
-      
-      rect.setAttribute("x", (i * widthPct) + "%");
-      rect.setAttribute("y", (100 - heightPct) + "%");
-      rect.setAttribute("width", Math.max(0.5, widthPct - 1) + "%");
-      rect.setAttribute("height", heightPct + "%");
-      rect.setAttribute("fill", "var(--primary)");
-      rect.setAttribute("opacity", "0.7");
-      
-      // Simple tooltip
-      var title = document.createElementNS(svgNS, "title");
-      title.textContent = "Sentence " + (i+1) + ": " + lengths[i] + " words";
-      rect.appendChild(title);
-      
-      svg.appendChild(rect);
-    }
-    return svg;
-  }
-
-  function renderAnnotatedText(stats) {
-    var container = document.getElementById('annotated-text');
-    container.innerHTML = '';
+  function renderHighlights(stats) {
     var text = stats.originalText;
-    
     var markers = [];
     for (var i = 0; i < stats.hardestSentences.length; i++) {
       var s = stats.hardestSentences[i];
@@ -382,75 +459,60 @@ document.addEventListener('DOMContentLoaded', function () {
         rank: s.rank
       });
     }
-    // Sort by start offset
     markers.sort(function(a, b) { return a.start - b.start; });
 
+    mirrorLayer.innerHTML = ''; // safe since we only use textContent nodes below
     var lastPos = 0;
-    for (var i = 0; i < markers.length; i++) {
-      var m = markers[i];
+    
+    for (var j = 0; j < markers.length; j++) {
+      var m = markers[j];
       if (m.start > lastPos) {
-        var textNode = document.createTextNode(text.slice(lastPos, m.start));
-        container.appendChild(textNode);
+        mirrorLayer.appendChild(document.createTextNode(text.slice(lastPos, m.start)));
       }
       
       var mark = document.createElement('mark');
       mark.id = 'mark-' + m.rank;
-      var innerText = text.slice(m.start, m.end);
-      
-      // Add rank number at start
-      var sup = document.createElement('sup');
-      sup.textContent = '[' + m.rank + '] ';
-      sup.style.fontWeight = 'bold';
-      sup.style.userSelect = 'none';
-      mark.appendChild(sup);
-      
-      mark.appendChild(document.createTextNode(innerText));
-      container.appendChild(mark);
+      mark.textContent = text.slice(m.start, m.end);
+      mirrorLayer.appendChild(mark);
       
       lastPos = m.end;
     }
 
     if (lastPos < text.length) {
-      container.appendChild(document.createTextNode(text.slice(lastPos)));
+      mirrorLayer.appendChild(document.createTextNode(text.slice(lastPos)));
+    }
+    
+    // Must add a tiny spacer if text ends in newline to sync textarea scrollheight
+    if (text[text.length - 1] === '\n') {
+      mirrorLayer.appendChild(document.createTextNode('\u200B'));
     }
   }
 
   function handleCopy() {
     if (!currentStats) return;
-    
     var s = currentStats;
-    var lines = [];
-    lines.push('CHAPTER READABILITY REPORT');
-    lines.push('==========================');
-    lines.push('Overall Grade: ' + s.medianGrade.toFixed(1));
-    lines.push('Flesch Reading Ease: ' + s.fleschReadingEase.toFixed(1) + ' (' + s.fleschLabel + ')');
-    lines.push('');
-    lines.push('SCORES');
-    lines.push('Flesch-Kincaid: ' + s.fleschKincaid.toFixed(1));
-    lines.push('Gunning Fog: ' + s.gunningFog.toFixed(1));
-    lines.push('Coleman-Liau: ' + s.colemanLiau.toFixed(1));
-    lines.push('ARI: ' + s.ari.toFixed(1));
-    if (s.smog !== null) lines.push('SMOG: ' + s.smog.toFixed(1));
-    lines.push('');
-    lines.push('CHAPTER CHECKS');
-    lines.push('Rhythm variation: ' + s.sentenceLengthStdDev.toFixed(1) + ' words');
-    lines.push('Passive voice: ' + s.passiveVoicePer1000.toFixed(1) + ' per 1000 words');
-    lines.push('Adverbs: ' + s.adverbsPer1000.toFixed(1) + ' per 1000 words');
-    lines.push('Dialogue share: ' + (s.dialogueShare.share * 100).toFixed(1) + '%');
-    lines.push('');
-    lines.push('VOCABULARY');
-    lines.push('Rare words: ' + (s.rareWordShare * 100).toFixed(1) + '%');
-    
-    var report = lines.join('\n');
+    var report = [
+      'CHAPTER READABILITY REPORT',
+      'Overall Grade: ' + s.medianGrade.toFixed(1),
+      'Flesch Reading Ease: ' + s.fleschReadingEase.toFixed(1) + ' (' + s.fleschLabel + ')',
+      '',
+      'Flesch-Kincaid: ' + s.fleschKincaid.toFixed(1),
+      'Gunning Fog: ' + s.gunningFog.toFixed(1),
+      'Coleman-Liau: ' + s.colemanLiau.toFixed(1),
+      'ARI: ' + s.ari.toFixed(1),
+      (s.smog !== null ? 'SMOG: ' + s.smog.toFixed(1) : ''),
+      '',
+      'Rhythm variation: ' + s.sentenceLengthStdDev.toFixed(1) + ' words',
+      'Passive voice: ' + s.passiveVoicePer1000.toFixed(1) + ' per 1000 words',
+      'Adverbs: ' + s.adverbsPer1000.toFixed(1) + ' per 1000 words',
+      'Dialogue share: ' + (s.dialogueShare.share * 100).toFixed(1) + '%'
+    ].join('\n');
     
     navigator.clipboard.writeText(report).then(function() {
-      var oldText = btnCopy.textContent;
+      var old = btnCopy.textContent;
       btnCopy.textContent = 'Copied!';
-      setTimeout(function() {
-        btnCopy.textContent = oldText;
-      }, 2000);
-    }).catch(function(err) {
-      alert('Failed to copy: ' + err);
+      setTimeout(function() { btnCopy.textContent = old; }, 2000);
     });
   }
+
 });

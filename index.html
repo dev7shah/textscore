@@ -2,128 +2,173 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Chapter Readability Checker</title>
-  <meta name="description" content="A free, private readability checker for authors. Get scores, find hard sentences, and check vocabulary.">
+  <meta name="description" content="Runs in your browser. Your text is never uploaded.">
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
     <header class="header">
-      <div class="header-content">
+      <div class="header-left">
         <h1>Chapter readability checker</h1>
-        <p class="subtitle">A secure, browser-based tool for authors. Your text never leaves this page.</p>
+        <p class="subtitle">Runs in your browser. Your text is never uploaded.</p>
+      </div>
+      <div class="header-actions">
+        <button id="btn-sample" class="btn btn-primary">Use sample text</button>
+        <button id="btn-clear" class="btn btn-secondary">Clear</button>
       </div>
     </header>
 
+    <div class="mobile-switcher">
+      <div class="segmented-control" role="tablist">
+        <button id="tab-text" class="segment-tab" role="tab" aria-selected="true" aria-controls="editor-card">Text</button>
+        <button id="tab-results" class="segment-tab" role="tab" aria-selected="false" aria-controls="results-card">Results</button>
+      </div>
+    </div>
+
     <main class="main-content">
-      <div class="input-section glass-panel">
-        <div class="controls-top">
-          <label for="audience-select" class="sr-only">Target audience</label>
-          <select id="audience-select" class="dropdown">
-            <option value="fiction">Fiction (Grade 5 to 8)</option>
-            <option value="nonfiction" selected>General nonfiction (Grade 8 to 10)</option>
-            <option value="academic">Academic (Grade 12+)</option>
-          </select>
+      <!-- Editor Card -->
+      <section id="editor-card" class="card editor-card">
+        <div class="editor-container">
+          <div id="mirror-layer" class="mirror-layer" aria-hidden="true"></div>
+          <textarea id="text-input" class="editor-textarea" placeholder="Paste or type your chapter here. Results update as you write." aria-label="Text to check"></textarea>
         </div>
-        
-        <textarea id="text-input" placeholder="Paste your chapter here..." aria-label="Text to check"></textarea>
-        
-        <div class="button-group">
-          <button id="btn-check" class="btn primary">Check readability</button>
-          <button id="btn-sample" class="btn secondary">Use sample text</button>
-          <button id="btn-clear" class="btn secondary outline">Clear</button>
+        <div class="editor-footer">
+          <span id="word-count">0 words</span>
+          <span id="update-status">Updated</span>
         </div>
-      </div>
+      </section>
 
-      <div id="loading" class="loading hidden">
-        <div class="spinner"></div>
-        <p id="loading-text">Processing text...</p>
-      </div>
-
-      <div id="error-message" class="error-message hidden" role="alert"></div>
-
-      <div id="results" class="results-section hidden">
-        <div class="results-header">
-          <h2>Results</h2>
-          <button id="btn-copy" class="btn small outline">Copy summary</button>
+      <!-- Results Card -->
+      <section id="results-card" class="card results-card mobile-hidden" aria-live="polite">
+        <div id="empty-state" class="empty-state">
+          <p>Paste or type your chapter to see the readability results.</p>
+          <button id="btn-sample-empty" class="btn btn-primary">Use sample text</button>
         </div>
 
-        <!-- Headline Grade -->
-        <div class="glass-panel highlight-panel">
-          <h3 class="panel-title">Overall readability</h3>
-          <div class="headline-grade">
-            <span id="headline-score" class="score-huge"></span>
-            <div class="grade-details">
-              <p id="headline-verdict" class="verdict-text"></p>
-              <p id="flesch-label" class="flesch-text"></p>
-              <p id="disagree-warning" class="warning-text hidden"></p>
+        <div id="results-content" class="results-inner hidden">
+          <!-- Audience -->
+          <div class="audience-section">
+            <label for="audience-select" class="sr-only">Target audience</label>
+            <select id="audience-select" class="dropdown">
+              <option value="fiction">Fiction (Grade 5 to 8)</option>
+              <option value="nonfiction" selected>General nonfiction (Grade 8 to 10)</option>
+              <option value="academic">Academic (Grade 12 and up)</option>
+            </select>
+          </div>
+
+          <!-- Verdict -->
+          <div class="verdict-section">
+            <div id="headline-score" class="headline-grade">Grade 8.0</div>
+            <div id="status-pill" class="status-pill status-ok">On target</div>
+            <div id="verdict-sentence" class="verdict-sentence">Reads at grade 8.0, on target for general nonfiction. Target is grades 8 to 10.</div>
+            
+            <div id="baseline-diff" class="baseline-diff hidden"></div>
+            <button id="btn-reset-baseline" class="btn-reset-baseline hidden">Reset first-check baseline</button>
+          </div>
+
+          <!-- Range Bar -->
+          <div class="range-container">
+            <div class="range-bar" aria-hidden="true">
+              <div id="range-target" class="range-target"></div>
+              <div id="range-spread" class="range-spread"></div>
+              <div id="range-median" class="range-median"></div>
+            </div>
+            <div id="range-caption" class="range-caption">Scores range from X to Y. Median is Z.</div>
+            <div id="disagree-warning" class="disagree-warning hidden">Formulas disagree by >4 grades. This usually happens when the text has unusual sentence lengths, lots of dialogue, or complex punctuation.</div>
+          </div>
+
+          <!-- Results Tabs Segmented Control -->
+          <div class="segmented-control" role="tablist" style="margin-top: 8px;">
+            <button class="segment-tab" role="tab" aria-selected="true" data-target="tab-sentences">Sentences</button>
+            <button class="segment-tab" role="tab" aria-selected="false" data-target="tab-overview">Overview</button>
+            <button class="segment-tab" role="tab" aria-selected="false" data-target="tab-vocabulary">Vocabulary</button>
+            <button class="segment-tab" role="tab" aria-selected="false" data-target="tab-rhythm">Rhythm</button>
+          </div>
+
+          <!-- Sentences Tab -->
+          <div id="tab-sentences" class="tab-content" role="tabpanel" aria-hidden="false">
+            <div id="sentences-list"></div>
+          </div>
+
+          <!-- Overview Tab -->
+          <div id="tab-overview" class="tab-content" role="tabpanel" aria-hidden="true">
+            <div class="stat-row">
+              <span>Words</span>
+              <strong id="stat-words">0</strong>
+            </div>
+            <div class="stat-row">
+              <span>Sentences</span>
+              <strong id="stat-sentences">0</strong>
+            </div>
+            <div class="stat-row">
+              <span>Words per sentence</span>
+              <strong id="stat-wps">0</strong>
+            </div>
+            <div class="stat-row">
+              <span>Reading time</span>
+              <strong id="stat-time">0 min</strong>
+            </div>
+            <div class="stat-row" style="margin-bottom: 16px;">
+              <span>Flesch Reading Ease</span>
+              <strong id="stat-fre">0 (Label)</strong>
+            </div>
+
+            <!-- Chapter Checks -->
+            <div class="check-item">
+              <div class="check-title" id="check-dialogue">Dialogue share: 0%</div>
+              <div class="check-advice" id="check-dialogue-advice"></div>
+            </div>
+            <div class="check-item">
+              <div class="check-title" id="check-passive">Passive voice: 0 per 1k words</div>
+              <div class="check-advice" id="check-passive-advice"></div>
+            </div>
+            <div class="check-item">
+              <div class="check-title" id="check-adverbs">Adverbs: 0 per 1k words</div>
+              <div class="check-advice" id="check-adverbs-advice"></div>
+            </div>
+            <div class="check-item">
+              <div class="check-title" id="check-paragraph">Longest paragraph: 0 words</div>
+              <div class="check-advice" id="check-paragraph-advice"></div>
+            </div>
+            <div class="check-item" id="check-openers-container">
+              <div class="check-title" id="check-openers">Repeated openers: 0</div>
+              <div class="check-advice" id="check-openers-advice"></div>
             </div>
           </div>
-        </div>
 
-        <div class="results-grid">
-          <!-- Formula Table -->
-          <div class="glass-panel">
-            <h3 class="panel-title">Scores</h3>
-            <table class="scores-table">
-              <thead>
-                <tr>
-                  <th>Formula</th>
-                  <th>Score</th>
-                </tr>
-              </thead>
-              <tbody id="formula-table-body">
-              </tbody>
+          <!-- Vocabulary Tab -->
+          <div id="tab-vocabulary" class="tab-content" role="tabpanel" aria-hidden="true">
+            <div class="vocab-stat" id="vocab-share">0% of words are rare.</div>
+            <div class="rare-word-list" id="rare-word-list"></div>
+          </div>
+
+          <!-- Rhythm Tab -->
+          <div id="tab-rhythm" class="tab-content" role="tabpanel" aria-hidden="true">
+            <div class="rhythm-chart" id="rhythm-chart"></div>
+            <div id="rhythm-stats" style="font-weight: 500; margin-bottom: 4px;">Longest: 0. Shortest: 0. Std dev: 0.</div>
+            <div id="rhythm-interpretation" class="check-advice"></div>
+          </div>
+
+          <!-- All Formulas -->
+          <details class="formulas-details">
+            <summary>All formulas and how they work</summary>
+            <table class="formulas-table">
+              <tbody id="formulas-tbody"></tbody>
             </table>
-          </div>
-
-          <!-- Chapter Checks -->
-          <div class="glass-panel">
-            <h3 class="panel-title">Chapter checks</h3>
-            <ul id="chapter-checks-list" class="checks-list">
-            </ul>
-          </div>
+            <div class="formula-desc">
+              <strong>Flesch-Kincaid:</strong> Standard US school grade formula.<br>
+              <strong>Gunning Fog:</strong> Focuses on words with 3+ syllables.<br>
+              <strong>Coleman-Liau:</strong> Focuses on letter counts instead of syllables.<br>
+              <strong>ARI:</strong> Automated Readability Index, uses character counts.<br>
+              <strong>SMOG:</strong> Simple Measure of Gobbledygook (needs 30+ sentences).
+            </div>
+            <button id="btn-copy" class="btn btn-secondary">Copy summary</button>
+          </details>
         </div>
-
-        <!-- Vocabulary -->
-        <div class="glass-panel">
-          <h3 class="panel-title">Vocabulary</h3>
-          <p id="rare-word-share" class="stat-text"></p>
-          <div id="rare-words-list" class="tags-container"></div>
-        </div>
-
-        <!-- Five Hardest Sentences -->
-        <div class="glass-panel">
-          <h3 class="panel-title">Hardest sentences</h3>
-          <p class="section-desc">The top five hardest sentences to read, based on length, vocabulary, and clauses.</p>
-          <div id="hardest-sentences-container" class="hardest-list"></div>
-        </div>
-
-        <!-- Annotated Chapter -->
-        <div class="glass-panel full-width">
-          <h3 class="panel-title">Annotated chapter</h3>
-          <div id="annotated-text" class="annotated-content"></div>
-        </div>
-      </div>
+      </section>
     </main>
-
-    <footer class="footer">
-      <div class="glass-panel info-panel">
-        <h3>How this works</h3>
-        <p>This tool runs entirely in your browser. It splits your text into sentences and words to estimate how hard it is to read.</p>
-        <p>The scores are estimates based on word length and sentence length, not judgments of quality.</p>
-        <ul class="formula-list">
-          <li><strong>Flesch Reading Ease:</strong> Scores out of 100. Higher is easier.</li>
-          <li><strong>Flesch-Kincaid Grade:</strong> Estimates the US school grade needed to understand the text.</li>
-          <li><strong>Gunning Fog:</strong> Measures complex words (3 or more syllables).</li>
-          <li><strong>SMOG:</strong> Also measures polysyllables, needs at least 30 sentences.</li>
-          <li><strong>Coleman-Liau:</strong> Uses letter counting instead of syllables.</li>
-          <li><strong>ARI:</strong> Uses character and word counts.</li>
-        </ul>
-      </div>
-    </footer>
   </div>
 
   <script src="wordlist.js"></script>
